@@ -209,6 +209,36 @@ class ActiveStorage::Blob < ActiveStorage::Record
     service.url_for_direct_upload key, expires_in: expires_in, content_type: content_type, content_length: byte_size, checksum: checksum
   end
 
+  # Generates the upload_id for the multipart upload
+  def service_generate_upload_id_for_multipart!(expires_in: ActiveStorage.service_urls_expire_in)
+    metadata[:upload_id] ||= begin
+      upload_id = service.upload_id_for_multipart_upload key, expires_in: expires_in, content_type: content_type
+      metadata[:upload_id] = upload_id
+      metadata[:upload_started_at] = DateTime.now
+      save
+      upload_id
+    end
+  end
+
+  # Returns a URL that can be used to upload a part of the file to the service. This URL is intended to be
+  # short-lived for security and only generated on-demand by the client-side JavaScript responsible for doing the uploading.
+  def service_url_for_multipart_upload(part_number, byte_size:, checksum:)
+    upload_id = metadata[:upload_id]
+    service.url_for_multipart_upload(key, part_number: part_number, upload_id: upload_id, content_length: byte_size, checksum: checksum)
+  end
+
+  # Signals the service that the upload has been completed and it should assemble all the uploaded files into an final file
+  def service_complete_multipart_upload
+    upload_id = metadata[:upload_id]
+    service.complete_multipart_upload(key, upload_id: upload_id)
+  end
+
+  # Signals the service that the upload has been aborted and it should free up the space.
+  def service_abort_multipart_upload
+    upload_id = metadata[:upload_id]
+    service.abort_multipart_upload(key, upload_id: upload_id)
+  end
+
   # Returns a Hash of headers for +service_url_for_direct_upload+ requests.
   def service_headers_for_direct_upload
     service.headers_for_direct_upload key, filename: filename, content_type: content_type, content_length: byte_size, checksum: checksum

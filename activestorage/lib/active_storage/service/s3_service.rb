@@ -5,6 +5,20 @@ gem "aws-sdk-s3", "~> 1.48"
 require "aws-sdk-s3"
 require "active_support/core_ext/numeric/bytes"
 
+module Aws
+  module S3
+    class Object
+      def presigned_request(http_method, params = {})
+        presigner = Presigner.new(client: client)
+        presigner.presigned_request(
+          http_method,
+          params.merge(bucket: bucket_name, key: key)
+        )
+      end
+    end
+  end
+end
+
 module ActiveStorage
   # Wraps the Amazon Simple Storage Service (S3) as an Active Storage service.
   # See ActiveStorage::Service for the generic API documentation that applies to all services.
@@ -93,6 +107,49 @@ module ActiveStorage
       content_disposition = content_disposition_with(type: disposition, filename: filename) if filename
 
       { "Content-Type" => content_type, "Content-MD5" => checksum, "Content-Disposition" => content_disposition }
+    end
+
+    def url_for_multipart_upload(key, upload_id:, part_number:, content_length:, checksum:)
+      instrument :multipart_part_url, key: key do |payload|
+        generated_url = object_for(key).presigned_request :upload_part,
+          content_length: content_length, content_md5: checksum, part_number: part_number,
+          upload_id: upload_id
+
+        payload[:url] = generated_url
+
+        generated_url
+      end
+    end
+
+    def upload_id_for_multipart_upload(key, expires_in:, content_type:)
+      instrument :multipart_create, key: key do |payload|
+        multipart_upload = object_for(key).initiate_multipart_upload expires: expires_in.to_i,
+          content_type: content_type
+
+        payload[:upload_id] = multipart_upload.id
+
+        multipart_upload.id
+      end
+    end
+
+    def complete_multipart_upload(key, upload_id:)
+      instrument :multipart_complete, key: key do |payload|
+        multipart_upload = object_for(key).multipart_upload(upload_id).complete(compute_parts: true)
+
+        payload[:upload_id] = upload_id
+
+        upload_id
+      end
+    end
+
+    def abort_multipart_upload(key, upload_id:)
+      instrument :multipart_abort, key: key do |payload|
+        object_for(key).multipart_upload(upload_id).abort
+
+        payload[:upload_id] = upload_id
+
+        upload_id
+      end
     end
 
     private

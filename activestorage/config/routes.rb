@@ -13,6 +13,9 @@ Rails.application.routes.draw do
     get  "/disk/:encoded_key/*filename" => "active_storage/disk#show", as: :rails_disk_service
     put  "/disk/:encoded_token" => "active_storage/disk#update", as: :update_rails_disk_service
     post "/direct_uploads" => "active_storage/direct_uploads#create", as: :rails_direct_uploads
+    post "/direct_uploads/:id/part/:part_number" => "active_storage/direct_uploads#generate_multipart_url", as: :rails_direct_uploads_multipart_part
+    post "/direct_uploads/:id/complete" => "active_storage/direct_uploads#complete_multipart", as: :rails_direct_uploads_complete_multipart
+    delete "/direct_uploads/:id/abort" => "active_storage/direct_uploads#abort_multipart", as: :rails_direct_uploads_abort_multipart
   end
 
   direct :rails_representation do |representation, options|
